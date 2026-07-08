@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>FleetControl.WebAPI</RootNamespace>
+    <UserSecretsId>fleetcontrol-saas-webapi</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="7.2.0" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.2.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FleetControl.Application\FleetControl.Application.csproj" />
+    <ProjectReference Include="..\FleetControl.Infrastructure\FleetControl.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

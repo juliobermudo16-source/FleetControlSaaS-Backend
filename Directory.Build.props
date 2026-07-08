@@ -1,0 +1,15 @@
+<Project>
+  <PropertyGroup>
+    <!--
+      Red de seguridad: si NuGet detecta que un paquete referenciado
+      explicitamente en un .csproj queda por debajo de lo que otro paquete
+      necesita transitivamente (NU1605), Visual Studio lo trata como ERROR
+      por defecto y bloquea la compilacion. Las versiones ya se alinearon
+      manualmente (ver FleetControl.Infrastructure.csproj y
+      FleetControl.Application.csproj), pero se deja esta advertencia como
+      advertencia (no error) por si en tu maquina NuGet resuelve una
+      combinacion de versiones ligeramente distinta a la usada aqui.
+    -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);NU1605</WarningsNotAsErrors>
+  </PropertyGroup>
+</Project>

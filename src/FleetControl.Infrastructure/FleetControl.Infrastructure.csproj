@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>FleetControl.Infrastructure</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Base de datos: PostgreSQL (Supabase) -->
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
+    <!-- Pin explicito: Npgsql.EntityFrameworkCore.PostgreSQL 9.0.4 trae
+         transitivamente Microsoft.EntityFrameworkCore.Relational 9.0.1, lo
+         que genera MSB3277 (conflicto de version) contra el 9.0.4 que
+         referencian los demas proyectos. Se fija aqui a 9.0.4 para que todos
+         los proyectos de la solucion usen la misma version. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="9.0.4" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.4">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+
+    <!-- JWT (validacion del token emitido por Supabase Auth) -->
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.2.1" />
+
+    <!-- Envio de correo (Gmail SMTP). Version 4.16.0+ por CVE-2026-41319
+         (STARTTLS Response Injection) corregido en MailKit 4.16.0. -->
+    <PackageReference Include="MailKit" Version="4.16.0" />
+
+    <!-- Reportes -->
+    <PackageReference Include="QuestPDF" Version="2024.12.3" />
+    <PackageReference Include="EPPlus" Version="7.5.2" />
+
+    <!-- HttpClient para Supabase Storage REST API -->
+    <PackageReference Include="Microsoft.Extensions.Http" Version="9.0.4" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="9.0.4" />
+
+    <!-- BackgroundService / IHostedService (MaintenanceAlertBackgroundService)
+         y ILogger<T>. Infrastructure es una libreria de clases normal (no un
+         proyecto Web), asi que estas abstracciones no vienen incluidas
+         automaticamente como si pasa en FleetControl.WebAPI. -->
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="9.0.4" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.4" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="9.0.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\FleetControl.Application\FleetControl.Application.csproj" />
+  </ItemGroup>
+
+</Project>
