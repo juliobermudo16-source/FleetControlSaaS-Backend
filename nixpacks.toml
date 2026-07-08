@@ -1,0 +1,8 @@
+[providers]
+dotnet = {}
+
+[phases.build]
+cmds = ["dotnet publish src/FleetControl.WebAPI/FleetControl.WebAPI.csproj -c Release -o out"]
+
+[start]
+cmd = "dotnet out/FleetControl.WebAPI.dll"
