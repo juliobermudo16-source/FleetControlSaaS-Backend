@@ -13,7 +13,11 @@ public record MaintenanceStatusDto(
     double WearPercentage,      // ((KmActual - KmUltimoServicio) / IntervaloKm) * 100
     AlertStatus Status,
     int KmRemaining             // km que faltan para llegar al 100% (puede ser negativo si ya paso)
-);
+)
+{
+    /// <summary>Fecha del ultimo servicio registrado (null si nunca se ha hecho).</summary>
+    public DateOnly? LastServiceDate { get; init; }
+}
 
 /// <summary>Resultado del calculo de semaforo para UN documento (SOAT, Revision Tecnica, etc).</summary>
 public record DocumentStatusDto(

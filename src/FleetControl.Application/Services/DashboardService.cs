@@ -50,14 +50,14 @@ public class DashboardService : IDashboardService
             var maintenanceItems = new List<MaintenanceStatusDto>();
             foreach (var type in maintenanceTypes)
             {
-                var lastMileage = vehicle.MaintenanceLogs
+                var lastLog = vehicle.MaintenanceLogs
                     .Where(l => l.MaintenanceTypeId == type.Id)
                     .OrderByDescending(l => l.MileageAtService)
-                    .Select(l => (int?)l.MileageAtService)
-                    .FirstOrDefault() ?? 0;
+                    .FirstOrDefault();
 
                 var status = _calculator.CalculateMaintenanceStatus(
-                    vehicle.Id, type.Id, type.Name, vehicle.CurrentMileage, lastMileage, type.IntervalKm);
+                    vehicle.Id, type.Id, type.Name, vehicle.CurrentMileage, lastLog?.MileageAtService ?? 0, type.IntervalKm)
+                    with { LastServiceDate = lastLog?.ServiceDate };
 
                 maintenanceItems.Add(status);
 

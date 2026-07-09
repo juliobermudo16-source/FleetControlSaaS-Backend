@@ -48,6 +48,9 @@ public class SupabaseStorageService : ISupabaseStorageService
         return $"{_settings.Url}/storage/v1{signedUrl}";
     }
 
+    public string GetPublicUrl(string bucket, string path) =>
+        $"{_settings.Url}/storage/v1/object/public/{bucket}/{path}";
+
     public async Task DeleteAsync(string bucket, string path, CancellationToken ct = default)
     {
         var response = await _http.DeleteAsync($"/storage/v1/object/{bucket}/{path}", ct);

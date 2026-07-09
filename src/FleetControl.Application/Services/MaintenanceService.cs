@@ -77,8 +77,10 @@ public class MaintenanceService : IMaintenanceService
 
             var lastServiceMileage = lastLog?.MileageAtService ?? 0;
 
-            results.Add(_calculator.CalculateMaintenanceStatus(
-                vehicleId, type.Id, type.Name, vehicle.CurrentMileage, lastServiceMileage, type.IntervalKm));
+            var status = _calculator.CalculateMaintenanceStatus(
+                vehicleId, type.Id, type.Name, vehicle.CurrentMileage, lastServiceMileage, type.IntervalKm);
+
+            results.Add(status with { LastServiceDate = lastLog?.ServiceDate });
         }
 
         return results;
