@@ -175,5 +175,112 @@ public class DocumentServiceTests : IDisposable
         url.Should().Be("https://signed-url.example/archivo.pdf");
     }
 
+    [Fact]
+    public async Task UpdateDatesAsync_DebeLanzarForbidden_CuandoNoEsAdmin()
+    {
+        _currentUserMock.SetupGet(u => u.IsAdmin).Returns(false);
+        var sut = CreateSut();
+
+        var act = async () => await sut.UpdateDatesAsync(Guid.NewGuid(), _today, _today.AddDays(30));
+
+        await act.Should().ThrowAsync<ForbiddenAccessException>();
+    }
+
+    [Fact]
+    public async Task UpdateDatesAsync_DebeLanzarExcepcion_SiVencimientoNoEsPosteriorAEmision()
+    {
+        _currentUserMock.SetupGet(u => u.IsAdmin).Returns(true);
+        var sut = CreateSut();
+
+        var act = async () => await sut.UpdateDatesAsync(Guid.NewGuid(), _today, _today);
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task UpdateDatesAsync_DebeLanzarNotFound_SiDocumentoNoExiste()
+    {
+        _currentUserMock.SetupGet(u => u.IsAdmin).Returns(true);
+        var sut = CreateSut();
+
+        var act = async () => await sut.UpdateDatesAsync(Guid.NewGuid(), _today, _today.AddDays(30));
+
+        await act.Should().ThrowAsync<NotFoundException>();
+    }
+
+    [Fact]
+    public async Task UpdateDatesAsync_DebeActualizarLasFechas_CuandoElUsuarioEsAdmin()
+    {
+        _currentUserMock.SetupGet(u => u.IsAdmin).Returns(true);
+        var vehicle = AddVehicle();
+        var document = new VehicleDocument
+        {
+            TenantId = _tenantId,
+            VehicleId = vehicle.Id,
+            DocumentType = DocumentType.Soat,
+            StoragePath = "ruta/al/archivo.pdf",
+            IssueDate = _today,
+            ExpirationDate = _today.AddDays(10),
+            FileHashSha256 = "hash"
+        };
+        _context.Documents.Add(document);
+        _context.SaveChanges();
+
+        var sut = CreateSut();
+        var nuevaEmision = _today.AddDays(1);
+        var nuevoVencimiento = _today.AddDays(90);
+        var result = await sut.UpdateDatesAsync(document.Id, nuevaEmision, nuevoVencimiento);
+
+        result.IssueDate.Should().Be(nuevaEmision);
+        result.ExpirationDate.Should().Be(nuevoVencimiento);
+        (await _context.Documents.FindAsync(document.Id))!.ExpirationDate.Should().Be(nuevoVencimiento);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_DebeLanzarForbidden_CuandoNoEsAdmin()
+    {
+        _currentUserMock.SetupGet(u => u.IsAdmin).Returns(false);
+        var sut = CreateSut();
+
+        var act = async () => await sut.DeleteAsync(Guid.NewGuid());
+
+        await act.Should().ThrowAsync<ForbiddenAccessException>();
+    }
+
+    [Fact]
+    public async Task DeleteAsync_DebeLanzarNotFound_SiDocumentoNoExiste()
+    {
+        _currentUserMock.SetupGet(u => u.IsAdmin).Returns(true);
+        var sut = CreateSut();
+
+        var act = async () => await sut.DeleteAsync(Guid.NewGuid());
+
+        await act.Should().ThrowAsync<NotFoundException>();
+    }
+
+    [Fact]
+    public async Task DeleteAsync_DebeEliminarElDocumento_YBorrarloDelStorage()
+    {
+        _currentUserMock.SetupGet(u => u.IsAdmin).Returns(true);
+        var vehicle = AddVehicle();
+        var document = new VehicleDocument
+        {
+            TenantId = _tenantId,
+            VehicleId = vehicle.Id,
+            DocumentType = DocumentType.Soat,
+            StoragePath = "ruta/al/archivo.pdf",
+            ExpirationDate = _today.AddDays(10),
+            FileHashSha256 = "hash"
+        };
+        _context.Documents.Add(document);
+        _context.SaveChanges();
+
+        var sut = CreateSut();
+        await sut.DeleteAsync(document.Id);
+
+        _storageMock.Verify(s => s.DeleteAsync("vehicle-documents", "ruta/al/archivo.pdf", It.IsAny<CancellationToken>()), Times.Once);
+        (await _context.Documents.CountAsync()).Should().Be(0);
+    }
+
     public void Dispose() => _context.Dispose();
 }

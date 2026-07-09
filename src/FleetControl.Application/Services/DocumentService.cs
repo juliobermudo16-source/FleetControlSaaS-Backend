@@ -90,6 +90,37 @@ public class DocumentService : IDocumentService
         return await _storage.GetSignedUrlAsync(Bucket, doc.StoragePath, 3600, ct);
     }
 
+    public async Task<DocumentDto> UpdateDatesAsync(Guid documentId, DateOnly issueDate, DateOnly expirationDate, CancellationToken ct = default)
+    {
+        if (!_currentUser.IsAdmin)
+            throw new ForbiddenAccessException("Solo un administrador puede editar documentos.");
+
+        if (expirationDate <= issueDate)
+            throw new InvalidOperationException("La fecha de vencimiento debe ser posterior a la fecha de emision.");
+
+        var doc = await _db.Documents.FirstOrDefaultAsync(d => d.Id == documentId, ct)
+            ?? throw new NotFoundException(nameof(VehicleDocument), documentId);
+
+        doc.IssueDate = issueDate;
+        doc.ExpirationDate = expirationDate;
+        await _db.SaveChangesAsync(ct);
+
+        return MapToDto(doc);
+    }
+
+    public async Task DeleteAsync(Guid documentId, CancellationToken ct = default)
+    {
+        if (!_currentUser.IsAdmin)
+            throw new ForbiddenAccessException("Solo un administrador puede eliminar documentos.");
+
+        var doc = await _db.Documents.FirstOrDefaultAsync(d => d.Id == documentId, ct)
+            ?? throw new NotFoundException(nameof(VehicleDocument), documentId);
+
+        await _storage.DeleteAsync(Bucket, doc.StoragePath, ct);
+        _db.Documents.Remove(doc);
+        await _db.SaveChangesAsync(ct);
+    }
+
     private DocumentDto MapToDto(VehicleDocument d)
     {
         var status = _calculator.CalculateDocumentStatus(d.VehicleId, d.Id, d.DocumentType, d.ExpirationDate, _dateTime.Today);

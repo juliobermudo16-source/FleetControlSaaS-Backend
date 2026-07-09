@@ -42,4 +42,15 @@ public class DocumentsController : BaseApiController
     [HttpGet("{documentId:guid}/download-url")]
     public async Task<ActionResult<string>> GetDownloadUrl(Guid documentId, CancellationToken ct)
         => Ok(new { url = await _documentService.GetDownloadUrlAsync(documentId, ct) });
+
+    [HttpPut("{documentId:guid}")]
+    public async Task<ActionResult<DocumentDto>> UpdateDates(Guid documentId, [FromBody] UpdateDocumentDatesDto dto, CancellationToken ct)
+        => Ok(await _documentService.UpdateDatesAsync(documentId, dto.IssueDate, dto.ExpirationDate, ct));
+
+    [HttpDelete("{documentId:guid}")]
+    public async Task<IActionResult> Delete(Guid documentId, CancellationToken ct)
+    {
+        await _documentService.DeleteAsync(documentId, ct);
+        return NoContent();
+    }
 }

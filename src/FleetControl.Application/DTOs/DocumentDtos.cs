@@ -8,6 +8,10 @@ public record UploadDocumentDto(
     DateOnly IssueDate,
     DateOnly ExpirationDate);
 
+public record UpdateDocumentDatesDto(
+    DateOnly IssueDate,
+    DateOnly ExpirationDate);
+
 public record DocumentDto(
     Guid Id,
     Guid VehicleId,
