@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using FleetControl.Application;
 using FleetControl.Infrastructure;
 using FleetControl.WebAPI.Middleware;
@@ -5,7 +6,11 @@ using FleetControl.WebAPI.Middleware;
 var builder = WebApplication.CreateBuilder(args);
 
 // --- Servicios ---
-builder.Services.AddControllers();
+// Los enums (AlertStatus, VehicleStatus, DocumentType, etc.) se serializan
+// como su nombre ("Green", "Active") en vez del valor numerico subyacente,
+// que es lo que el frontend espera (comparaciones tipo status === 'Active').
+builder.Services.AddControllers()
+    .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
