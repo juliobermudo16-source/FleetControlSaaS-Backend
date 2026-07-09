@@ -45,13 +45,19 @@ builder.Services.AddApplicationServices();
 // cuando los tests ejecutan con WebApplicationFactory (setea EnvironmentName="Testing").
 builder.Services.AddInfrastructureServices(builder.Configuration, builder.Environment);
 
-// --- CORS: permite al frontend (Vite local y Vercel) llamar a la API ---
+// --- CORS: permite al frontend llamar a la API ---
+// Se permite cualquier origen a proposito: la API se autentica con Bearer
+// token (JWT de Supabase en el header Authorization), no con cookies, asi
+// que CORS no es una capa de seguridad aqui (un origen no autorizado
+// igual necesita un token valido para hacer algo). Esto evita tener que
+// re-desplegar el backend cada vez que Vercel asigna una URL de preview
+// nueva (con hash aleatorio) para cada deploy.
 const string CorsPolicy = "FleetControlCors";
 builder.Services.AddCors(options =>
 {
     options.AddPolicy(CorsPolicy, policy =>
     {
-        policy.WithOrigins("http://localhost:5173", "https://fleet-control-frontend.vercel.app")
+        policy.AllowAnyOrigin()
               .AllowAnyHeader()
               .AllowAnyMethod();
     });
