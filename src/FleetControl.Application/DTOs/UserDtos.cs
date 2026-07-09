@@ -6,10 +6,16 @@ public record UserDto(
     string Email,
     string Role,
     bool IsActive,
-    string? Phone);
+    string? Phone,
+    string? AvatarUrl,
+    DateTime? PendingDeletionAt);
 
 public record InviteUserDto(
     string FullName,
     string Email,
     string Role,
+    string? Phone);
+
+public record UpdateProfileDto(
+    string FullName,
     string? Phone);

@@ -22,7 +22,10 @@ public class UserServiceTests : IDisposable
     private readonly ApplicationDbContext _context;
     private readonly Mock<ICurrentUserService> _currentUserMock = new();
     private readonly Mock<ISupabaseAuthAdminService> _authAdminMock = new();
+    private readonly Mock<ISupabaseStorageService> _storageMock = new();
+    private readonly Mock<IDateTimeProvider> _dateTimeMock = new();
     private readonly Guid _tenantId = Guid.NewGuid();
+    private readonly DateTime _now = new(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
 
     public UserServiceTests()
     {
@@ -32,9 +35,12 @@ public class UserServiceTests : IDisposable
 
         _context = new ApplicationDbContext(options);
         _currentUserMock.SetupGet(u => u.TenantId).Returns(_tenantId);
+        _dateTimeMock.SetupGet(d => d.UtcNow).Returns(_now);
+        _storageMock.Setup(s => s.GetPublicUrl(It.IsAny<string>(), It.IsAny<string>()))
+            .Returns((string bucket, string path) => $"https://storage.test/{bucket}/{path}");
     }
 
-    private UserService CreateSut() => new(_context, _currentUserMock.Object, _authAdminMock.Object);
+    private UserService CreateSut() => new(_context, _currentUserMock.Object, _authAdminMock.Object, _storageMock.Object, _dateTimeMock.Object);
 
     private AppUser AddUser(string fullName, string email, UserRole role = UserRole.Driver, bool isActive = true)
     {
@@ -247,6 +253,21 @@ public class UserServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task DeactivateUserAsync_DebeProgramarElBorradoPermanente_A10MinutosDeDistancia()
+    {
+        var admin = AddUser("Admin", "admin@test.com", UserRole.Admin);
+        var driver = AddUser("Conductor Uno", "conductor@test.com");
+        _currentUserMock.SetupGet(u => u.IsAdmin).Returns(true);
+        _currentUserMock.SetupGet(u => u.UserId).Returns(admin.Id);
+        var sut = CreateSut();
+
+        await sut.DeactivateUserAsync(driver.Id);
+
+        var persisted = await _context.Users.FirstAsync(u => u.Id == driver.Id);
+        persisted.PendingDeletionAt.Should().Be(_now.AddMinutes(10));
+    }
+
+    [Fact]
     public async Task ReactivateUserAsync_DebeLanzarForbidden_CuandoNoEsAdmin()
     {
         var driver = AddUser("Conductor Uno", "conductor@test.com", isActive: false);
@@ -259,9 +280,11 @@ public class UserServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task ReactivateUserAsync_DebeReactivarAlUsuario()
+    public async Task ReactivateUserAsync_DebeReactivarAlUsuario_YCancelarElBorradoProgramado()
     {
         var driver = AddUser("Conductor Uno", "conductor@test.com", isActive: false);
+        driver.PendingDeletionAt = _now.AddMinutes(5);
+        await _context.SaveChangesAsync();
         _currentUserMock.SetupGet(u => u.IsAdmin).Returns(true);
         var sut = CreateSut();
 
@@ -269,6 +292,66 @@ public class UserServiceTests : IDisposable
 
         var persisted = await _context.Users.FirstAsync(u => u.Id == driver.Id);
         persisted.IsActive.Should().BeTrue();
+        persisted.PendingDeletionAt.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task UpdateMyProfileAsync_DebeActualizarNombreYTelefono()
+    {
+        var user = AddUser("Nombre Viejo", "user@test.com");
+        _currentUserMock.SetupGet(u => u.UserId).Returns(user.Id);
+        var sut = CreateSut();
+
+        var result = await sut.UpdateMyProfileAsync(new UpdateProfileDto("Nombre Nuevo", "999888777"));
+
+        result.FullName.Should().Be("Nombre Nuevo");
+        result.Phone.Should().Be("999888777");
+        var persisted = await _context.Users.FirstAsync(u => u.Id == user.Id);
+        persisted.FullName.Should().Be("Nombre Nuevo");
+        persisted.Phone.Should().Be("999888777");
+    }
+
+    [Fact]
+    public async Task UpdateMyProfileAsync_DebeLanzarExcepcion_SiElNombreEstaVacio()
+    {
+        var user = AddUser("Nombre Viejo", "user@test.com");
+        _currentUserMock.SetupGet(u => u.UserId).Returns(user.Id);
+        var sut = CreateSut();
+
+        var act = async () => await sut.UpdateMyProfileAsync(new UpdateProfileDto("   ", null));
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task UploadMyAvatarAsync_DebeGuardarLaRutaYDevolverLaUrlPublica()
+    {
+        var user = AddUser("Julio", "julio@test.com");
+        _currentUserMock.SetupGet(u => u.UserId).Returns(user.Id);
+        var sut = CreateSut();
+        using var stream = new MemoryStream(new byte[] { 1, 2, 3 });
+
+        var result = await sut.UploadMyAvatarAsync(stream, "foto.jpg");
+
+        result.AvatarUrl.Should().StartWith("https://storage.test/user-avatars/");
+        var persisted = await _context.Users.FirstAsync(u => u.Id == user.Id);
+        persisted.AvatarStoragePath.Should().NotBeNullOrEmpty();
+        _storageMock.Verify(s => s.UploadAsync("user-avatars", It.IsAny<string>(), stream, "image/jpeg", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task UploadMyAvatarAsync_DebeBorrarLaFotoAnterior_SiYaTeniaUna()
+    {
+        var user = AddUser("Julio", "julio@test.com");
+        user.AvatarStoragePath = "tenant/user/vieja.jpg";
+        await _context.SaveChangesAsync();
+        _currentUserMock.SetupGet(u => u.UserId).Returns(user.Id);
+        var sut = CreateSut();
+        using var stream = new MemoryStream(new byte[] { 1 });
+
+        await sut.UploadMyAvatarAsync(stream, "nueva.jpg");
+
+        _storageMock.Verify(s => s.DeleteAsync("user-avatars", "tenant/user/vieja.jpg", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     public void Dispose() => _context.Dispose();

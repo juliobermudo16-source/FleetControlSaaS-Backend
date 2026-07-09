@@ -198,5 +198,80 @@ public class UsersControllerTests : IClassFixture<CustomWebApplicationFactory>
         meResponse.StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
-    private record UserResponse(Guid Id, string FullName, string Email, string Role, bool IsActive);
+    [Fact]
+    public async Task UpdateMe_SinToken_DebeRetornar401()
+    {
+        var client = _factory.CreateClient();
+
+        var response = await client.PutAsJsonAsync("/api/users/me", new { fullName = "X", phone = (string?)null });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task UpdateMe_ComoConductor_DebeActualizarSuPropioPerfil()
+    {
+        var client = CreateAuthenticatedClient(_factory.DriverTenantAId);
+
+        var response = await client.PutAsJsonAsync("/api/users/me", new { fullName = "Conductor Renombrado", phone = "999111222" });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<UserResponse>();
+        body!.FullName.Should().Be("Conductor Renombrado");
+        body.Phone.Should().Be("999111222");
+
+        var meResponse = await client.GetAsync("/api/users/me");
+        var me = await meResponse.Content.ReadFromJsonAsync<UserResponse>();
+        me!.FullName.Should().Be("Conductor Renombrado");
+    }
+
+    [Fact]
+    public async Task UpdateMe_ConNombreVacio_DebeRetornar400()
+    {
+        var client = CreateAuthenticatedClient(_factory.DriverTenantAId);
+
+        var response = await client.PutAsJsonAsync("/api/users/me", new { fullName = "   ", phone = (string?)null });
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task UploadAvatar_SinToken_DebeRetornar401()
+    {
+        var client = _factory.CreateClient();
+        using var content = new MultipartFormDataContent();
+        content.Add(new ByteArrayContent(new byte[] { 1, 2, 3 }) { Headers = { ContentType = new MediaTypeHeaderValue("image/png") } }, "file", "foto.png");
+
+        var response = await client.PostAsync("/api/users/me/avatar", content);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task UploadAvatar_ComoConductor_DebeActualizarLaFotoDePerfil()
+    {
+        var client = CreateAuthenticatedClient(_factory.DriverTenantAId);
+        using var content = new MultipartFormDataContent();
+        content.Add(new ByteArrayContent(new byte[] { 1, 2, 3 }) { Headers = { ContentType = new MediaTypeHeaderValue("image/png") } }, "file", "foto.png");
+
+        var response = await client.PostAsync("/api/users/me/avatar", content);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<UserResponse>();
+        body!.AvatarUrl.Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task UploadAvatar_ConArchivoQueNoEsImagen_DebeRetornar400()
+    {
+        var client = CreateAuthenticatedClient(_factory.DriverTenantAId);
+        using var content = new MultipartFormDataContent();
+        content.Add(new ByteArrayContent(new byte[] { 1, 2, 3 }) { Headers = { ContentType = new MediaTypeHeaderValue("application/pdf") } }, "file", "archivo.pdf");
+
+        var response = await client.PostAsync("/api/users/me/avatar", content);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    private record UserResponse(Guid Id, string FullName, string Email, string Role, bool IsActive, string? Phone, string? AvatarUrl, DateTime? PendingDeletionAt);
 }

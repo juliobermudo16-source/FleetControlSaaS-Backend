@@ -15,15 +15,27 @@ namespace FleetControl.Application.Services;
 /// </summary>
 public class UserService : IUserService
 {
+    private const string AvatarBucket = "user-avatars";
+    private static readonly TimeSpan DeletionGracePeriod = TimeSpan.FromMinutes(10);
+
     private readonly IApplicationDbContext _db;
     private readonly ICurrentUserService _currentUser;
     private readonly ISupabaseAuthAdminService _authAdmin;
+    private readonly ISupabaseStorageService _storage;
+    private readonly IDateTimeProvider _dateTime;
 
-    public UserService(IApplicationDbContext db, ICurrentUserService currentUser, ISupabaseAuthAdminService authAdmin)
+    public UserService(
+        IApplicationDbContext db,
+        ICurrentUserService currentUser,
+        ISupabaseAuthAdminService authAdmin,
+        ISupabaseStorageService storage,
+        IDateTimeProvider dateTime)
     {
         _db = db;
         _currentUser = currentUser;
         _authAdmin = authAdmin;
+        _storage = storage;
+        _dateTime = dateTime;
     }
 
     public async Task<UserDto> GetCurrentUserAsync(CancellationToken ct = default)
@@ -86,6 +98,7 @@ public class UserService : IUserService
             ?? throw new NotFoundException(nameof(AppUser), userId);
 
         user.IsActive = false;
+        user.PendingDeletionAt = _dateTime.UtcNow.Add(DeletionGracePeriod);
 
         // Se desasigna de cualquier vehiculo para que no quede "en manos" de un
         // conductor sin acceso al sistema.
@@ -105,9 +118,46 @@ public class UserService : IUserService
             ?? throw new NotFoundException(nameof(AppUser), userId);
 
         user.IsActive = true;
+        user.PendingDeletionAt = null;
         await _db.SaveChangesAsync(ct);
     }
 
-    private static UserDto MapToDto(AppUser u) =>
-        new(u.Id, u.FullName, u.Email, u.Role.ToString().ToLowerInvariant(), u.IsActive, u.Phone);
+    public async Task<UserDto> UpdateMyProfileAsync(UpdateProfileDto dto, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(dto.FullName))
+            throw new InvalidOperationException("El nombre completo no puede estar vacio.");
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == _currentUser.UserId, ct)
+            ?? throw new NotFoundException(nameof(AppUser), _currentUser.UserId);
+
+        user.FullName = dto.FullName.Trim();
+        user.Phone = dto.Phone;
+        await _db.SaveChangesAsync(ct);
+
+        return MapToDto(user);
+    }
+
+    public async Task<UserDto> UploadMyAvatarAsync(Stream fileContent, string fileName, CancellationToken ct = default)
+    {
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == _currentUser.UserId, ct)
+            ?? throw new NotFoundException(nameof(AppUser), _currentUser.UserId);
+
+        var previousPath = user.AvatarStoragePath;
+        var storagePath = $"{_currentUser.TenantId}/{_currentUser.UserId}/{_dateTime.UtcNow:yyyyMMddHHmmss}_{fileName}";
+        await _storage.UploadAsync(AvatarBucket, storagePath, fileContent, "image/jpeg", ct);
+
+        user.AvatarStoragePath = storagePath;
+        await _db.SaveChangesAsync(ct);
+
+        if (!string.IsNullOrEmpty(previousPath))
+            await _storage.DeleteAsync(AvatarBucket, previousPath, ct);
+
+        return MapToDto(user);
+    }
+
+    private UserDto MapToDto(AppUser u) =>
+        new(
+            u.Id, u.FullName, u.Email, u.Role.ToString().ToLowerInvariant(), u.IsActive, u.Phone,
+            u.AvatarStoragePath is null ? null : _storage.GetPublicUrl(AvatarBucket, u.AvatarStoragePath),
+            u.PendingDeletionAt);
 }

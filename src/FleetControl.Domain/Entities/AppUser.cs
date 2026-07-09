@@ -15,7 +15,12 @@ public class AppUser : Common.ITenantEntity
     public string Email { get; set; } = string.Empty;
     public UserRole Role { get; set; } = UserRole.Driver;
     public string? Phone { get; set; }
+    public string? AvatarStoragePath { get; set; }
     public bool IsActive { get; set; } = true;
+
+    /// <summary>Si tiene valor, el usuario sera borrado permanentemente (Auth + BD) cuando llegue esta fecha.</summary>
+    public DateTime? PendingDeletionAt { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 

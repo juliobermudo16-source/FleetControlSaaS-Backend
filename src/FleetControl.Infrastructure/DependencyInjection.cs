@@ -45,8 +45,9 @@ public static class DependencyInjection
         services.AddHttpClient<ISupabaseAuthAdminService, SupabaseAuthAdminService>();
         services.AddHttpClient<SupabaseJwksProvider>();
 
-        // --- Background Service de alertas ---
+        // --- Background Services ---
         services.AddHostedService<MaintenanceAlertBackgroundService>();
+        services.AddHostedService<UserDeletionBackgroundService>();
 
         return services;
     }

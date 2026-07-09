@@ -20,7 +20,9 @@ public class AppUserConfiguration : IEntityTypeConfiguration<AppUser>
                            s => s == "admin" ? UserRole.Admin : UserRole.Driver)
             .HasMaxLength(20);
         b.Property(u => u.Phone).HasColumnName("phone").HasMaxLength(20);
+        b.Property(u => u.AvatarStoragePath).HasColumnName("avatar_storage_path");
         b.Property(u => u.IsActive).HasColumnName("is_active");
+        b.Property(u => u.PendingDeletionAt).HasColumnName("pending_deletion_at");
         b.Property(u => u.CreatedAt).HasColumnName("created_at");
         b.Property(u => u.UpdatedAt).HasColumnName("updated_at");
 

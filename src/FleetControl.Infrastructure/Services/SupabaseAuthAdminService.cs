@@ -44,5 +44,16 @@ public class SupabaseAuthAdminService : ISupabaseAuthAdminService
         return result.Id;
     }
 
+    public async Task DeleteUserAsync(Guid userId, CancellationToken ct = default)
+    {
+        var response = await _http.DeleteAsync($"/auth/v1/admin/users/{userId}", ct);
+
+        if (!response.IsSuccessStatusCode && response.StatusCode != System.Net.HttpStatusCode.NotFound)
+        {
+            var body = await response.Content.ReadAsStringAsync(ct);
+            throw new InvalidOperationException($"No se pudo borrar al usuario en Supabase Auth: {response.StatusCode} - {body}");
+        }
+    }
+
     private record SupabaseInviteResponse([property: JsonPropertyName("id")] Guid Id);
 }

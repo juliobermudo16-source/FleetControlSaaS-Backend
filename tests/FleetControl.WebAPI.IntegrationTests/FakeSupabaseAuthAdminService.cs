@@ -12,4 +12,7 @@ public class FakeSupabaseAuthAdminService : ISupabaseAuthAdminService
 {
     public Task<Guid> InviteUserByEmailAsync(string email, CancellationToken ct = default)
         => Task.FromResult(Guid.NewGuid());
+
+    public Task DeleteUserAsync(Guid userId, CancellationToken ct = default)
+        => Task.CompletedTask;
 }

@@ -18,6 +18,22 @@ public class UsersController : BaseApiController
     public async Task<ActionResult<UserDto>> GetMe(CancellationToken ct)
         => Ok(await _userService.GetCurrentUserAsync(ct));
 
+    [HttpPut("me")]
+    public async Task<ActionResult<UserDto>> UpdateMe([FromBody] UpdateProfileDto dto, CancellationToken ct)
+        => Ok(await _userService.UpdateMyProfileAsync(dto, ct));
+
+    /// <summary>Sube la foto de perfil del usuario autenticado. multipart/form-data: file.</summary>
+    [HttpPost("me/avatar")]
+    [RequestSizeLimit(5_000_000)] // 5 MB
+    public async Task<ActionResult<UserDto>> UploadMyAvatar(IFormFile file, CancellationToken ct)
+    {
+        if (!file.ContentType.StartsWith("image/"))
+            return BadRequest(new { error = "Solo se permiten archivos de imagen." });
+
+        await using var stream = file.OpenReadStream();
+        return Ok(await _userService.UploadMyAvatarAsync(stream, file.FileName, ct));
+    }
+
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<UserDto>>> GetAll(CancellationToken ct)
         => Ok(await _userService.GetTenantUsersAsync(ct));
