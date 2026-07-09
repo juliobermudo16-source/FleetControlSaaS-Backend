@@ -152,10 +152,12 @@ public class MaintenanceAlertBackgroundService : BackgroundService
                 });
                 await db.SaveChangesAsync(ct);
             }
-            catch
+            catch (Exception ex)
             {
-                // Se registra el fallo de envio en logs pero no interrumpe el ciclo
-                // de evaluacion de las demas alertas.
+                // No se interrumpe el ciclo de evaluacion de las demas alertas por
+                // un fallo de envio individual, pero SI se registra en logs para
+                // poder diagnosticar problemas de SMTP/credenciales.
+                _logger.LogError(ex, "No se pudo enviar la alerta '{Subject}' a {Recipient}.", subject, recipient);
             }
         }
     }
