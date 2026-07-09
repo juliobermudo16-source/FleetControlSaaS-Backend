@@ -123,6 +123,38 @@ public class DocumentServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task UploadAsync_DebeReemplazarElDocumentoExistente_DelMismoTipo()
+    {
+        _currentUserMock.SetupGet(u => u.IsAdmin).Returns(true);
+        var vehicle = AddVehicle();
+        var anterior = new VehicleDocument
+        {
+            TenantId = _tenantId,
+            VehicleId = vehicle.Id,
+            DocumentType = DocumentType.Soat,
+            StoragePath = "ruta/anterior.pdf",
+            IssueDate = _today.AddDays(-100),
+            ExpirationDate = _today.AddDays(-1),
+            FileHashSha256 = "hash-anterior"
+        };
+        _context.Documents.Add(anterior);
+        _context.SaveChanges();
+
+        _storageMock
+            .Setup(s => s.UploadAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<Stream>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("ruta-nueva");
+
+        var sut = CreateSut();
+        var dto = new UploadDocumentDto(vehicle.Id, DocumentType.Soat, _today, _today.AddDays(365));
+        var result = await sut.UploadAsync(dto, MakeFile(), "soat-nuevo.pdf");
+
+        (await _context.Documents.CountAsync()).Should().Be(1);
+        (await _context.Documents.CountAsync(d => d.Id == anterior.Id)).Should().Be(0);
+        result.IssueDate.Should().Be(_today);
+        _storageMock.Verify(s => s.DeleteAsync("vehicle-documents", "ruta/anterior.pdf", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
     public async Task GetByVehicleAsync_DebeRetornarSoloLosDocumentosDelVehiculo()
     {
         var vehicle = AddVehicle();

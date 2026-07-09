@@ -53,11 +53,23 @@ public class DocumentService : IDocumentService
         var fileHash = Convert.ToHexString(hashBytes).ToLowerInvariant();
         fileContent.Position = 0;
 
-        // 2. Subir a Supabase Storage (bucket privado).
+        // 2. Un vehiculo solo puede tener un documento vigente por tipo (SOAT,
+        // Revision Tecnica, Tarjeta de Propiedad). Si ya existe uno, se reemplaza
+        // para evitar filas duplicadas confusas en la UI.
+        var existing = await _db.Documents
+            .Where(d => d.VehicleId == dto.VehicleId && d.DocumentType == dto.DocumentType)
+            .ToListAsync(ct);
+        foreach (var old in existing)
+        {
+            await _storage.DeleteAsync(Bucket, old.StoragePath, ct);
+            _db.Documents.Remove(old);
+        }
+
+        // 3. Subir a Supabase Storage (bucket privado).
         var storagePath = $"{_currentUser.TenantId}/{dto.VehicleId}/{dto.DocumentType}_{DateTime.UtcNow:yyyyMMddHHmmss}_{fileName}";
         await _storage.UploadAsync(Bucket, storagePath, fileContent, "application/pdf", ct);
 
-        // 3. Persistir metadatos + hash.
+        // 4. Persistir metadatos + hash.
         var document = new VehicleDocument
         {
             TenantId = _currentUser.TenantId,
