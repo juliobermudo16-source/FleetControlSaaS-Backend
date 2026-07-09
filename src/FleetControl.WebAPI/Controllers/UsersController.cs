@@ -25,4 +25,18 @@ public class UsersController : BaseApiController
     [HttpPost("invite")]
     public async Task<ActionResult<UserDto>> Invite([FromBody] InviteUserDto dto, CancellationToken ct)
         => Ok(await _userService.InviteUserAsync(dto, ct));
+
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Deactivate(Guid id, CancellationToken ct)
+    {
+        await _userService.DeactivateUserAsync(id, ct);
+        return NoContent();
+    }
+
+    [HttpPost("{id:guid}/reactivate")]
+    public async Task<IActionResult> Reactivate(Guid id, CancellationToken ct)
+    {
+        await _userService.ReactivateUserAsync(id, ct);
+        return NoContent();
+    }
 }

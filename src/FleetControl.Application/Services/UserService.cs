@@ -74,6 +74,40 @@ public class UserService : IUserService
         return MapToDto(user);
     }
 
+    public async Task DeactivateUserAsync(Guid userId, CancellationToken ct = default)
+    {
+        if (!_currentUser.IsAdmin)
+            throw new ForbiddenAccessException("Solo un administrador puede eliminar usuarios.");
+
+        if (userId == _currentUser.UserId)
+            throw new InvalidOperationException("No puedes eliminarte a ti mismo.");
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct)
+            ?? throw new NotFoundException(nameof(AppUser), userId);
+
+        user.IsActive = false;
+
+        // Se desasigna de cualquier vehiculo para que no quede "en manos" de un
+        // conductor sin acceso al sistema.
+        var assignedVehicles = await _db.Vehicles.Where(v => v.AssignedDriverId == userId).ToListAsync(ct);
+        foreach (var vehicle in assignedVehicles)
+            vehicle.AssignedDriverId = null;
+
+        await _db.SaveChangesAsync(ct);
+    }
+
+    public async Task ReactivateUserAsync(Guid userId, CancellationToken ct = default)
+    {
+        if (!_currentUser.IsAdmin)
+            throw new ForbiddenAccessException("Solo un administrador puede reactivar usuarios.");
+
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct)
+            ?? throw new NotFoundException(nameof(AppUser), userId);
+
+        user.IsActive = true;
+        await _db.SaveChangesAsync(ct);
+    }
+
     private static UserDto MapToDto(AppUser u) =>
         new(u.Id, u.FullName, u.Email, u.Role.ToString().ToLowerInvariant(), u.IsActive, u.Phone);
 }

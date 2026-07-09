@@ -135,5 +135,68 @@ public class UsersControllerTests : IClassFixture<CustomWebApplicationFactory>
         response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
+    [Fact]
+    public async Task Deactivate_SinToken_DebeRetornar401()
+    {
+        var client = _factory.CreateClient();
+
+        var response = await client.DeleteAsync($"/api/users/{Guid.NewGuid()}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Deactivate_ComoConductor_DebeRetornar403()
+    {
+        var client = CreateAuthenticatedClient(_factory.DriverTenantAId);
+
+        var response = await client.DeleteAsync($"/api/users/{_factory.AdminTenantAId}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    [Fact]
+    public async Task Deactivate_UsuarioPropio_DebeRetornar400()
+    {
+        var client = CreateAuthenticatedClient(_factory.AdminTenantAId);
+
+        var response = await client.DeleteAsync($"/api/users/{_factory.AdminTenantAId}");
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Deactivate_ComoAdmin_DebeRetornar204_YElUsuarioPierdeAcceso()
+    {
+        var adminClient = CreateAuthenticatedClient(_factory.AdminTenantAId);
+        var inviteResponse = await adminClient.PostAsJsonAsync("/api/users/invite", new { fullName = "A Desactivar", email = "desactivar@test.com", role = "driver" });
+        var invited = await inviteResponse.Content.ReadFromJsonAsync<UserResponse>();
+
+        var deleteResponse = await adminClient.DeleteAsync($"/api/users/{invited!.Id}");
+
+        deleteResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var deactivatedUserClient = CreateAuthenticatedClient(invited.Id);
+        var meResponse = await deactivatedUserClient.GetAsync("/api/users/me");
+        meResponse.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
+    [Fact]
+    public async Task Reactivate_ComoAdmin_DebeRestaurarElAcceso()
+    {
+        var adminClient = CreateAuthenticatedClient(_factory.AdminTenantAId);
+        var inviteResponse = await adminClient.PostAsJsonAsync("/api/users/invite", new { fullName = "A Reactivar", email = "reactivar@test.com", role = "driver" });
+        var invited = await inviteResponse.Content.ReadFromJsonAsync<UserResponse>();
+        await adminClient.DeleteAsync($"/api/users/{invited!.Id}");
+
+        var reactivateResponse = await adminClient.PostAsync($"/api/users/{invited.Id}/reactivate", null);
+
+        reactivateResponse.StatusCode.Should().Be(HttpStatusCode.NoContent);
+
+        var reactivatedUserClient = CreateAuthenticatedClient(invited.Id);
+        var meResponse = await reactivatedUserClient.GetAsync("/api/users/me");
+        meResponse.StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
     private record UserResponse(Guid Id, string FullName, string Email, string Role, bool IsActive);
 }

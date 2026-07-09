@@ -44,6 +44,22 @@ public class UserServiceTests : IDisposable
         return user;
     }
 
+    private Vehicle AddVehicle(string licensePlate, Guid? assignedDriverId)
+    {
+        var vehicle = new Vehicle
+        {
+            TenantId = _tenantId,
+            LicensePlate = licensePlate,
+            Brand = "Toyota",
+            Model = "Hilux",
+            ManufactureYear = 2022,
+            AssignedDriverId = assignedDriverId
+        };
+        _context.Vehicles.Add(vehicle);
+        _context.SaveChanges();
+        return vehicle;
+    }
+
     [Fact]
     public async Task GetCurrentUserAsync_DebeRetornarElUsuarioActual()
     {
@@ -172,6 +188,87 @@ public class UserServiceTests : IDisposable
         var result = await sut.InviteUserAsync(dto);
 
         result.Role.Should().Be("admin");
+    }
+
+    [Fact]
+    public async Task DeactivateUserAsync_DebeLanzarForbidden_CuandoNoEsAdmin()
+    {
+        var driver = AddUser("Conductor Uno", "conductor@test.com");
+        _currentUserMock.SetupGet(u => u.IsAdmin).Returns(false);
+        var sut = CreateSut();
+
+        var act = async () => await sut.DeactivateUserAsync(driver.Id);
+
+        await act.Should().ThrowAsync<ForbiddenAccessException>();
+    }
+
+    [Fact]
+    public async Task DeactivateUserAsync_DebeLanzarExcepcion_SiElAdminSeQuiereEliminarASiMismo()
+    {
+        var admin = AddUser("Admin", "admin@test.com", UserRole.Admin);
+        _currentUserMock.SetupGet(u => u.IsAdmin).Returns(true);
+        _currentUserMock.SetupGet(u => u.UserId).Returns(admin.Id);
+        var sut = CreateSut();
+
+        var act = async () => await sut.DeactivateUserAsync(admin.Id);
+
+        await act.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task DeactivateUserAsync_DebeLanzarNotFound_SiElUsuarioNoExiste()
+    {
+        _currentUserMock.SetupGet(u => u.IsAdmin).Returns(true);
+        _currentUserMock.SetupGet(u => u.UserId).Returns(Guid.NewGuid());
+        var sut = CreateSut();
+
+        var act = async () => await sut.DeactivateUserAsync(Guid.NewGuid());
+
+        await act.Should().ThrowAsync<NotFoundException>();
+    }
+
+    [Fact]
+    public async Task DeactivateUserAsync_DebeDesactivarAlUsuario_YDesasignarSusVehiculos()
+    {
+        var admin = AddUser("Admin", "admin@test.com", UserRole.Admin);
+        var driver = AddUser("Conductor Uno", "conductor@test.com");
+        var vehicle = AddVehicle("ABC-123", driver.Id);
+        _currentUserMock.SetupGet(u => u.IsAdmin).Returns(true);
+        _currentUserMock.SetupGet(u => u.UserId).Returns(admin.Id);
+        var sut = CreateSut();
+
+        await sut.DeactivateUserAsync(driver.Id);
+
+        var persisted = await _context.Users.FirstAsync(u => u.Id == driver.Id);
+        persisted.IsActive.Should().BeFalse();
+
+        var persistedVehicle = await _context.Vehicles.FirstAsync(v => v.Id == vehicle.Id);
+        persistedVehicle.AssignedDriverId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ReactivateUserAsync_DebeLanzarForbidden_CuandoNoEsAdmin()
+    {
+        var driver = AddUser("Conductor Uno", "conductor@test.com", isActive: false);
+        _currentUserMock.SetupGet(u => u.IsAdmin).Returns(false);
+        var sut = CreateSut();
+
+        var act = async () => await sut.ReactivateUserAsync(driver.Id);
+
+        await act.Should().ThrowAsync<ForbiddenAccessException>();
+    }
+
+    [Fact]
+    public async Task ReactivateUserAsync_DebeReactivarAlUsuario()
+    {
+        var driver = AddUser("Conductor Uno", "conductor@test.com", isActive: false);
+        _currentUserMock.SetupGet(u => u.IsAdmin).Returns(true);
+        var sut = CreateSut();
+
+        await sut.ReactivateUserAsync(driver.Id);
+
+        var persisted = await _context.Users.FirstAsync(u => u.Id == driver.Id);
+        persisted.IsActive.Should().BeTrue();
     }
 
     public void Dispose() => _context.Dispose();
