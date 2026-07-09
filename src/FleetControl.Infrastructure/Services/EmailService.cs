@@ -1,33 +1,43 @@
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
 using FleetControl.Application.Common.Interfaces;
-using MailKit.Net.Smtp;
-using MailKit.Security;
 using Microsoft.Extensions.Options;
-using MimeKit;
 
 namespace FleetControl.Infrastructure.Services;
 
-/// <summary>Envio de correos via Gmail SMTP (MailKit) para las alertas de semaforo.</summary>
+/// <summary>
+/// Envio de correo via la API HTTPS de Resend (no SMTP: Railway bloquea los
+/// puertos SMTP salientes en los planes no-Pro, asi que cualquier envio via
+/// MailKit/SmtpClient se queda colgado con TimeoutException).
+/// </summary>
 public class EmailService : IEmailService
 {
+    private readonly HttpClient _http;
     private readonly EmailSettings _settings;
 
-    public EmailService(IOptions<EmailSettings> settings)
+    public EmailService(HttpClient http, IOptions<EmailSettings> settings)
     {
+        _http = http;
         _settings = settings.Value;
+        _http.BaseAddress = new Uri("https://api.resend.com/");
+        _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _settings.ApiKey);
     }
 
     public async Task SendAsync(string toEmail, string subject, string htmlBody, CancellationToken ct = default)
     {
-        var message = new MimeMessage();
-        message.From.Add(new MailboxAddress(_settings.SenderName, _settings.SenderEmail));
-        message.To.Add(MailboxAddress.Parse(toEmail));
-        message.Subject = subject;
-        message.Body = new BodyBuilder { HtmlBody = htmlBody }.ToMessageBody();
+        var payload = new
+        {
+            from = $"{_settings.SenderName} <{_settings.SenderEmail}>",
+            to = new[] { toEmail },
+            subject,
+            html = htmlBody
+        };
 
-        using var client = new SmtpClient();
-        await client.ConnectAsync(_settings.SmtpHost, _settings.SmtpPort, SecureSocketOptions.StartTls, ct);
-        await client.AuthenticateAsync(_settings.SenderEmail, _settings.AppPassword, ct);
-        await client.SendAsync(message, ct);
-        await client.DisconnectAsync(true, ct);
+        var response = await _http.PostAsJsonAsync("emails", payload, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            var error = await response.Content.ReadAsStringAsync(ct);
+            throw new InvalidOperationException($"Resend respondio {(int)response.StatusCode}: {error}");
+        }
     }
 }

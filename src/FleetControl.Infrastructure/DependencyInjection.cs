@@ -38,7 +38,7 @@ public static class DependencyInjection
 
         // --- Servicios de infraestructura ---
         services.AddScoped<IDateTimeProvider, DateTimeProvider>();
-        services.AddScoped<IEmailService, EmailService>();
+        services.AddHttpClient<IEmailService, EmailService>();
         services.AddScoped<IPdfReportService, PdfReportService>();
         services.AddScoped<IExcelReportService, ExcelReportService>();
         services.AddHttpClient<ISupabaseStorageService, SupabaseStorageService>();
