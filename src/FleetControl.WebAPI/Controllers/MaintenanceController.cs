@@ -13,7 +13,7 @@ public class MaintenanceController : BaseApiController
         _maintenanceService = maintenanceService;
     }
 
-    /// <summary>Registra un mantenimiento realizado (solo Admin).</summary>
+    /// <summary>Registra un mantenimiento realizado (Admin, o el conductor asignado una vez por avance de kilometraje).</summary>
     [HttpPost]
     public async Task<ActionResult<MaintenanceLogDto>> Register([FromBody] CreateMaintenanceLogDto dto, CancellationToken ct)
         => Ok(await _maintenanceService.RegisterMaintenanceAsync(dto, ct));

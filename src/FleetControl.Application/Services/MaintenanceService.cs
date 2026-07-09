@@ -21,14 +21,30 @@ public class MaintenanceService : IMaintenanceService
 
     public async Task<MaintenanceLogDto> RegisterMaintenanceAsync(CreateMaintenanceLogDto dto, CancellationToken ct = default)
     {
-        if (!_currentUser.IsAdmin)
-            throw new ForbiddenAccessException("Solo un administrador puede registrar mantenimientos.");
-
         var vehicle = await _db.Vehicles.FirstOrDefaultAsync(v => v.Id == dto.VehicleId, ct)
             ?? throw new NotFoundException(nameof(Vehicle), dto.VehicleId);
 
+        var isAssignedDriver = vehicle.AssignedDriverId == _currentUser.UserId;
+        if (!_currentUser.IsAdmin && !isAssignedDriver)
+            throw new ForbiddenAccessException("Solo un administrador o el conductor asignado puede registrar mantenimientos.");
+
         var maintenanceType = await _db.MaintenanceTypes.FirstOrDefaultAsync(m => m.Id == dto.MaintenanceTypeId, ct)
             ?? throw new NotFoundException(nameof(MaintenanceType), dto.MaintenanceTypeId);
+
+        if (!_currentUser.IsAdmin)
+        {
+            // El conductor solo puede registrar un mantenimiento de cada tipo una
+            // vez por avance real de kilometraje: si ya existe un registro igual
+            // o mas reciente, debe corregirlo un administrador.
+            var lastLog = await _db.MaintenanceLogs
+                .Where(l => l.VehicleId == dto.VehicleId && l.MaintenanceTypeId == dto.MaintenanceTypeId)
+                .OrderByDescending(l => l.MileageAtService)
+                .FirstOrDefaultAsync(ct);
+
+            if (lastLog is not null && dto.MileageAtService <= lastLog.MileageAtService)
+                throw new ForbiddenAccessException(
+                    "Ya registraste este mantenimiento a ese kilometraje. Reporta el nuevo kilometraje del vehiculo o pide a un administrador que lo corrija.");
+        }
 
         var log = new MaintenanceLog
         {

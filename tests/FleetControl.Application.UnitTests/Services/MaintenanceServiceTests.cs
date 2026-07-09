@@ -13,9 +13,10 @@ using Xunit;
 namespace FleetControl.Application.UnitTests.Services;
 
 /// <summary>
-/// Pruebas de MaintenanceService: registro de mantenimientos (solo admin),
-/// actualizacion condicional del odometro del vehiculo, y consulta del
-/// estado de semaforo por vehiculo con reglas de autorizacion por rol.
+/// Pruebas de MaintenanceService: registro de mantenimientos (admin, o el
+/// conductor asignado una vez por avance de kilometraje), actualizacion
+/// condicional del odometro del vehiculo, y consulta del estado de semaforo
+/// por vehiculo con reglas de autorizacion por rol.
 /// </summary>
 public class MaintenanceServiceTests : IDisposable
 {
@@ -68,15 +69,89 @@ public class MaintenanceServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task RegisterMaintenanceAsync_DebeLanzarForbidden_CuandoNoEsAdmin()
+    public async Task RegisterMaintenanceAsync_DebeLanzarForbidden_CuandoNoEsAdminNiConductorAsignado()
     {
+        var vehicle = AddVehicle(assignedDriverId: Guid.NewGuid());
         _currentUserMock.SetupGet(u => u.IsAdmin).Returns(false);
+        _currentUserMock.SetupGet(u => u.UserId).Returns(Guid.NewGuid());
         var sut = CreateSut();
-        var dto = new CreateMaintenanceLogDto(Guid.NewGuid(), Guid.NewGuid(), 1000, new DateOnly(2026, 1, 1), 100, null);
+        var dto = new CreateMaintenanceLogDto(vehicle.Id, Guid.NewGuid(), 1000, new DateOnly(2026, 1, 1), 100, null);
 
         var act = async () => await sut.RegisterMaintenanceAsync(dto);
 
         await act.Should().ThrowAsync<ForbiddenAccessException>();
+    }
+
+    [Fact]
+    public async Task RegisterMaintenanceAsync_DebePermitirAlConductorAsignado_RegistrarLaPrimeraVez()
+    {
+        var driverId = Guid.NewGuid();
+        var vehicle = AddVehicle(currentMileage: 1000, assignedDriverId: driverId);
+        var type = AddMaintenanceType();
+        _currentUserMock.SetupGet(u => u.IsAdmin).Returns(false);
+        _currentUserMock.SetupGet(u => u.UserId).Returns(driverId);
+        var sut = CreateSut();
+        var dto = new CreateMaintenanceLogDto(vehicle.Id, type.Id, 1200, new DateOnly(2026, 1, 1), 100, null);
+
+        var result = await sut.RegisterMaintenanceAsync(dto);
+
+        result.MileageAtService.Should().Be(1200);
+        (await _context.MaintenanceLogs.CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task RegisterMaintenanceAsync_DebeRechazarAlConductor_SiElKilometrajeNoAvanzoDesdeElUltimoRegistroDeEseTipo()
+    {
+        var driverId = Guid.NewGuid();
+        var vehicle = AddVehicle(currentMileage: 5000, assignedDriverId: driverId);
+        var type = AddMaintenanceType();
+        _context.MaintenanceLogs.Add(new MaintenanceLog { TenantId = _tenantId, VehicleId = vehicle.Id, MaintenanceTypeId = type.Id, MileageAtService = 5000, ServiceDate = new DateOnly(2026, 1, 1) });
+        _context.SaveChanges();
+        _currentUserMock.SetupGet(u => u.IsAdmin).Returns(false);
+        _currentUserMock.SetupGet(u => u.UserId).Returns(driverId);
+        var sut = CreateSut();
+        // Intenta registrar de nuevo al mismo kilometraje (o uno menor) del ultimo registro.
+        var dto = new CreateMaintenanceLogDto(vehicle.Id, type.Id, 5000, new DateOnly(2026, 2, 1), 100, null);
+
+        var act = async () => await sut.RegisterMaintenanceAsync(dto);
+
+        await act.Should().ThrowAsync<ForbiddenAccessException>();
+        (await _context.MaintenanceLogs.CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task RegisterMaintenanceAsync_DebePermitirAlConductor_RegistrarDeNuevo_SiElKilometrajeAvanzo()
+    {
+        var driverId = Guid.NewGuid();
+        var vehicle = AddVehicle(currentMileage: 5000, assignedDriverId: driverId);
+        var type = AddMaintenanceType();
+        _context.MaintenanceLogs.Add(new MaintenanceLog { TenantId = _tenantId, VehicleId = vehicle.Id, MaintenanceTypeId = type.Id, MileageAtService = 5000, ServiceDate = new DateOnly(2026, 1, 1) });
+        _context.SaveChanges();
+        _currentUserMock.SetupGet(u => u.IsAdmin).Returns(false);
+        _currentUserMock.SetupGet(u => u.UserId).Returns(driverId);
+        var sut = CreateSut();
+        var dto = new CreateMaintenanceLogDto(vehicle.Id, type.Id, 6000, new DateOnly(2026, 3, 1), 100, null);
+
+        await sut.RegisterMaintenanceAsync(dto);
+
+        (await _context.MaintenanceLogs.CountAsync()).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task RegisterMaintenanceAsync_AdminPuedeRegistrar_AunSiElKilometrajeNoAvanzo()
+    {
+        var vehicle = AddVehicle(currentMileage: 5000);
+        var type = AddMaintenanceType();
+        _context.MaintenanceLogs.Add(new MaintenanceLog { TenantId = _tenantId, VehicleId = vehicle.Id, MaintenanceTypeId = type.Id, MileageAtService = 5000, ServiceDate = new DateOnly(2026, 1, 1) });
+        _context.SaveChanges();
+        _currentUserMock.SetupGet(u => u.IsAdmin).Returns(true);
+        _currentUserMock.SetupGet(u => u.UserId).Returns(Guid.NewGuid());
+        var sut = CreateSut();
+        var dto = new CreateMaintenanceLogDto(vehicle.Id, type.Id, 5000, new DateOnly(2026, 2, 1), 100, "correccion");
+
+        await sut.RegisterMaintenanceAsync(dto);
+
+        (await _context.MaintenanceLogs.CountAsync()).Should().Be(2);
     }
 
     [Fact]
