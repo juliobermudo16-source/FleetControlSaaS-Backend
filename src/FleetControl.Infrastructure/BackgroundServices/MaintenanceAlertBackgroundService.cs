@@ -96,7 +96,7 @@ public class MaintenanceAlertBackgroundService : BackgroundService
             }
 
             // --- Documentos ---
-            foreach (var doc in vehicle.Documents)
+            foreach (var doc in vehicle.Documents.Where(d => d.IsCurrent))
             {
                 var status = calculator.CalculateDocumentStatus(vehicle.Id, doc.Id, doc.DocumentType, doc.ExpirationDate, today);
 

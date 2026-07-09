@@ -19,6 +19,7 @@ public class DashboardServiceTests : IDisposable
     private readonly ApplicationDbContext _context;
     private readonly Mock<ICurrentUserService> _currentUserMock = new();
     private readonly Mock<IDateTimeProvider> _dateTimeMock = new();
+    private readonly Mock<ISupabaseStorageService> _storageMock = new();
     private readonly Guid _tenantId = Guid.NewGuid();
     private readonly DateOnly _today = new(2026, 1, 1);
 
@@ -34,7 +35,7 @@ public class DashboardServiceTests : IDisposable
     }
 
     private DashboardService CreateSut() =>
-        new(_context, _currentUserMock.Object, new MaintenanceAlertCalculator(), _dateTimeMock.Object);
+        new(_context, _currentUserMock.Object, new MaintenanceAlertCalculator(), _dateTimeMock.Object, _storageMock.Object);
 
     private MaintenanceType AddOilChangeType(int intervalKm = 5000, decimal estimatedCost = 150, Guid? tenantId = null)
     {
@@ -181,6 +182,43 @@ public class DashboardServiceTests : IDisposable
         result.UrgentVehicles.Should().HaveCount(2);
         result.UrgentVehicles[0].VehicleId.Should().Be(vehicleRed.Id);
         result.UrgentVehicles[1].VehicleId.Should().Be(vehicleYellow.Id);
+    }
+
+    [Fact]
+    public async Task GetSummaryAsync_UrgentVehicles_DebeIncluirUrlDeLaFotoPrincipal()
+    {
+        AddOilChangeType(intervalKm: 5000, estimatedCost: 100);
+        var vehicle = AddVehicle(currentMileage: 6000); // 120% -> rojo
+
+        _context.VehiclePhotos.Add(new VehiclePhoto
+        {
+            TenantId = _tenantId,
+            VehicleId = vehicle.Id,
+            StoragePath = "ruta/foto.jpg",
+            IsPrimary = true
+        });
+        _context.SaveChanges();
+
+        _storageMock
+            .Setup(s => s.GetPublicUrl("vehicle-photos", "ruta/foto.jpg"))
+            .Returns("https://public.example/ruta/foto.jpg");
+
+        var sut = CreateSut();
+        var result = await sut.GetSummaryAsync();
+
+        result.UrgentVehicles.Should().ContainSingle(v => v.PhotoUrl == "https://public.example/ruta/foto.jpg");
+    }
+
+    [Fact]
+    public async Task GetSummaryAsync_UrgentVehicles_PhotoUrlDebeSerNull_CuandoNoHayFotos()
+    {
+        AddOilChangeType(intervalKm: 5000, estimatedCost: 100);
+        AddVehicle(currentMileage: 6000); // 120% -> rojo, sin fotos
+
+        var sut = CreateSut();
+        var result = await sut.GetSummaryAsync();
+
+        result.UrgentVehicles.Should().ContainSingle(v => v.PhotoUrl == null);
     }
 
     public void Dispose() => _context.Dispose();

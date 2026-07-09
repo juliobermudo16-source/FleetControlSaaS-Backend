@@ -2,6 +2,7 @@ using FleetControl.Application.Common.Interfaces;
 using FleetControl.Application.DTOs;
 using FleetControl.Application.Exceptions;
 using FleetControl.Domain.Entities;
+using FleetControl.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;
 
@@ -53,17 +54,15 @@ public class DocumentService : IDocumentService
         var fileHash = Convert.ToHexString(hashBytes).ToLowerInvariant();
         fileContent.Position = 0;
 
-        // 2. Un vehiculo solo puede tener un documento vigente por tipo (SOAT,
-        // Revision Tecnica, Tarjeta de Propiedad). Si ya existe uno, se reemplaza
-        // para evitar filas duplicadas confusas en la UI.
-        var existing = await _db.Documents
-            .Where(d => d.VehicleId == dto.VehicleId && d.DocumentType == dto.DocumentType)
+        // 2. Un vehiculo solo puede tener UN documento vigente por tipo (SOAT,
+        // Revision Tecnica, Tarjeta de Propiedad), para no confundir la UI con
+        // filas duplicadas. El/los anteriores no se borran (se conservan como
+        // historial, ej. SOATs de años previos), solo dejan de ser "vigentes".
+        var currentOnes = await _db.Documents
+            .Where(d => d.VehicleId == dto.VehicleId && d.DocumentType == dto.DocumentType && d.IsCurrent)
             .ToListAsync(ct);
-        foreach (var old in existing)
-        {
-            await _storage.DeleteAsync(Bucket, old.StoragePath, ct);
-            _db.Documents.Remove(old);
-        }
+        foreach (var old in currentOnes)
+            old.IsCurrent = false;
 
         // 3. Subir a Supabase Storage (bucket privado).
         var storagePath = $"{_currentUser.TenantId}/{dto.VehicleId}/{dto.DocumentType}_{DateTime.UtcNow:yyyyMMddHHmmss}_{fileName}";
@@ -90,7 +89,16 @@ public class DocumentService : IDocumentService
 
     public async Task<IReadOnlyList<DocumentDto>> GetByVehicleAsync(Guid vehicleId, CancellationToken ct = default)
     {
-        var docs = await _db.Documents.Where(d => d.VehicleId == vehicleId).ToListAsync(ct);
+        var docs = await _db.Documents.Where(d => d.VehicleId == vehicleId && d.IsCurrent).ToListAsync(ct);
+        return docs.Select(MapToDto).ToList();
+    }
+
+    public async Task<IReadOnlyList<DocumentDto>> GetHistoryByTypeAsync(Guid vehicleId, DocumentType documentType, CancellationToken ct = default)
+    {
+        var docs = await _db.Documents
+            .Where(d => d.VehicleId == vehicleId && d.DocumentType == documentType)
+            .OrderByDescending(d => d.IssueDate)
+            .ToListAsync(ct);
         return docs.Select(MapToDto).ToList();
     }
 
@@ -136,6 +144,6 @@ public class DocumentService : IDocumentService
     private DocumentDto MapToDto(VehicleDocument d)
     {
         var status = _calculator.CalculateDocumentStatus(d.VehicleId, d.Id, d.DocumentType, d.ExpirationDate, _dateTime.Today);
-        return new DocumentDto(d.Id, d.VehicleId, d.DocumentType, d.IssueDate, d.ExpirationDate, d.FileHashSha256, status.Status, status.DaysUntilExpiration);
+        return new DocumentDto(d.Id, d.VehicleId, d.DocumentType, d.IssueDate, d.ExpirationDate, d.FileHashSha256, status.Status, status.DaysUntilExpiration, d.IsCurrent);
     }
 }

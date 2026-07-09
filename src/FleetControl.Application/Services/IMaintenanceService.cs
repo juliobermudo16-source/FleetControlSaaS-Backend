@@ -6,4 +6,5 @@ public interface IMaintenanceService
 {
     Task<MaintenanceLogDto> RegisterMaintenanceAsync(CreateMaintenanceLogDto dto, CancellationToken ct = default);
     Task<IReadOnlyList<MaintenanceStatusDto>> GetVehicleMaintenanceStatusAsync(Guid vehicleId, CancellationToken ct = default);
+    Task<IReadOnlyList<MaintenanceLogDto>> GetVehicleMaintenanceHistoryAsync(Guid vehicleId, CancellationToken ct = default);
 }

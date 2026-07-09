@@ -29,6 +29,7 @@ public class VehicleDocumentConfiguration : IEntityTypeConfiguration<VehicleDocu
         b.Property(d => d.IssueDate).HasColumnName("issue_date");
         b.Property(d => d.ExpirationDate).HasColumnName("expiration_date");
         b.Property(d => d.UploadedBy).HasColumnName("uploaded_by");
+        b.Property(d => d.IsCurrent).HasColumnName("is_current");
         b.Property(d => d.CreatedAt).HasColumnName("created_at");
         b.Property(d => d.UpdatedAt).HasColumnName("updated_at");
 

@@ -39,6 +39,11 @@ public class DocumentsController : BaseApiController
     public async Task<ActionResult<IReadOnlyList<DocumentDto>>> GetByVehicle(Guid vehicleId, CancellationToken ct)
         => Ok(await _documentService.GetByVehicleAsync(vehicleId, ct));
 
+    /// <summary>Devuelve TODOS los documentos (vigente + historicos) de un tipo para un vehiculo, mas recientes primero.</summary>
+    [HttpGet("vehicle/{vehicleId:guid}/type/{documentType}/history")]
+    public async Task<ActionResult<IReadOnlyList<DocumentDto>>> GetHistory(Guid vehicleId, DocumentType documentType, CancellationToken ct)
+        => Ok(await _documentService.GetHistoryByTypeAsync(vehicleId, documentType, ct));
+
     [HttpGet("{documentId:guid}/download-url")]
     public async Task<ActionResult<string>> GetDownloadUrl(Guid documentId, CancellationToken ct)
         => Ok(new { url = await _documentService.GetDownloadUrlAsync(documentId, ct) });

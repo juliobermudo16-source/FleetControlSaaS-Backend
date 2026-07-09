@@ -36,4 +36,8 @@ public record VehicleAlertSummaryDto(
     AlertStatus OverallStatus,
     IReadOnlyList<MaintenanceStatusDto> MaintenanceItems,
     IReadOnlyList<DocumentStatusDto> DocumentItems
-);
+)
+{
+    /// <summary>URL publica de la foto principal del vehiculo (null si no tiene fotos).</summary>
+    public string? PhotoUrl { get; init; }
+};

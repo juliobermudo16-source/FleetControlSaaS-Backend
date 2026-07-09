@@ -22,4 +22,9 @@ public class MaintenanceController : BaseApiController
     [HttpGet("vehicle/{vehicleId:guid}/status")]
     public async Task<ActionResult<IReadOnlyList<MaintenanceStatusDto>>> GetStatus(Guid vehicleId, CancellationToken ct)
         => Ok(await _maintenanceService.GetVehicleMaintenanceStatusAsync(vehicleId, ct));
+
+    /// <summary>Devuelve el historial completo de mantenimientos registrados para un vehiculo.</summary>
+    [HttpGet("vehicle/{vehicleId:guid}/history")]
+    public async Task<ActionResult<IReadOnlyList<MaintenanceLogDto>>> GetHistory(Guid vehicleId, CancellationToken ct)
+        => Ok(await _maintenanceService.GetVehicleMaintenanceHistoryAsync(vehicleId, ct));
 }

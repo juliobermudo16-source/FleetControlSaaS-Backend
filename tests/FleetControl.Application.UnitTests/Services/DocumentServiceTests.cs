@@ -123,7 +123,7 @@ public class DocumentServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task UploadAsync_DebeReemplazarElDocumentoExistente_DelMismoTipo()
+    public async Task UploadAsync_DebeMarcarElDocumentoAnterior_ComoNoVigente_SinBorrarlo()
     {
         _currentUserMock.SetupGet(u => u.IsAdmin).Returns(true);
         var vehicle = AddVehicle();
@@ -148,19 +148,23 @@ public class DocumentServiceTests : IDisposable
         var dto = new UploadDocumentDto(vehicle.Id, DocumentType.Soat, _today, _today.AddDays(365));
         var result = await sut.UploadAsync(dto, MakeFile(), "soat-nuevo.pdf");
 
-        (await _context.Documents.CountAsync()).Should().Be(1);
-        (await _context.Documents.CountAsync(d => d.Id == anterior.Id)).Should().Be(0);
+        // El anterior sigue existiendo (historial), solo deja de ser vigente.
+        (await _context.Documents.CountAsync()).Should().Be(2);
+        var anteriorActualizado = await _context.Documents.FindAsync(anterior.Id);
+        anteriorActualizado!.IsCurrent.Should().BeFalse();
         result.IssueDate.Should().Be(_today);
-        _storageMock.Verify(s => s.DeleteAsync("vehicle-documents", "ruta/anterior.pdf", It.IsAny<CancellationToken>()), Times.Once);
+        result.IsCurrent.Should().BeTrue();
+        _storageMock.Verify(s => s.DeleteAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     [Fact]
-    public async Task GetByVehicleAsync_DebeRetornarSoloLosDocumentosDelVehiculo()
+    public async Task GetByVehicleAsync_DebeRetornarSoloLosDocumentosVigentesDelVehiculo()
     {
         var vehicle = AddVehicle();
         var otroVehiculo = Guid.NewGuid();
         _context.Documents.AddRange(
-            new VehicleDocument { TenantId = _tenantId, VehicleId = vehicle.Id, DocumentType = DocumentType.Soat, ExpirationDate = _today.AddDays(10), FileHashSha256 = "a" },
+            new VehicleDocument { TenantId = _tenantId, VehicleId = vehicle.Id, DocumentType = DocumentType.Soat, ExpirationDate = _today.AddDays(10), FileHashSha256 = "a", IsCurrent = true },
+            new VehicleDocument { TenantId = _tenantId, VehicleId = vehicle.Id, DocumentType = DocumentType.Soat, ExpirationDate = _today.AddDays(-400), FileHashSha256 = "viejo", IsCurrent = false },
             new VehicleDocument { TenantId = _tenantId, VehicleId = otroVehiculo, DocumentType = DocumentType.Soat, ExpirationDate = _today.AddDays(10), FileHashSha256 = "b" });
         _context.SaveChanges();
 
@@ -169,6 +173,25 @@ public class DocumentServiceTests : IDisposable
 
         result.Should().ContainSingle();
         result[0].VehicleId.Should().Be(vehicle.Id);
+        result[0].FileHashSha256.Should().Be("a");
+    }
+
+    [Fact]
+    public async Task GetHistoryByTypeAsync_DebeRetornarVigenteYAnteriores_OrdenadosPorFechaDeEmisionDescendente()
+    {
+        var vehicle = AddVehicle();
+        _context.Documents.AddRange(
+            new VehicleDocument { TenantId = _tenantId, VehicleId = vehicle.Id, DocumentType = DocumentType.Soat, IssueDate = _today.AddYears(-2), ExpirationDate = _today.AddYears(-1), FileHashSha256 = "viejo1", IsCurrent = false },
+            new VehicleDocument { TenantId = _tenantId, VehicleId = vehicle.Id, DocumentType = DocumentType.Soat, IssueDate = _today.AddYears(-1), ExpirationDate = _today.AddDays(-5), FileHashSha256 = "viejo2", IsCurrent = false },
+            new VehicleDocument { TenantId = _tenantId, VehicleId = vehicle.Id, DocumentType = DocumentType.Soat, IssueDate = _today, ExpirationDate = _today.AddYears(1), FileHashSha256 = "actual", IsCurrent = true },
+            new VehicleDocument { TenantId = _tenantId, VehicleId = vehicle.Id, DocumentType = DocumentType.RevisionTecnica, IssueDate = _today, ExpirationDate = _today.AddYears(1), FileHashSha256 = "otro-tipo", IsCurrent = true });
+        _context.SaveChanges();
+
+        var sut = CreateSut();
+        var result = await sut.GetHistoryByTypeAsync(vehicle.Id, DocumentType.Soat);
+
+        result.Should().HaveCount(3);
+        result.Select(d => d.FileHashSha256).Should().ContainInOrder("actual", "viejo2", "viejo1");
     }
 
     [Fact]

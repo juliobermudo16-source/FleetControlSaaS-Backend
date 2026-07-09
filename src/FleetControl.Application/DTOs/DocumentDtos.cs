@@ -20,4 +20,5 @@ public record DocumentDto(
     DateOnly ExpirationDate,
     string FileHashSha256,
     AlertStatus Status,
-    int DaysUntilExpiration);
+    int DaysUntilExpiration,
+    bool IsCurrent);

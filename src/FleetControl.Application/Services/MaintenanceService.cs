@@ -85,4 +85,24 @@ public class MaintenanceService : IMaintenanceService
 
         return results;
     }
+
+    public async Task<IReadOnlyList<MaintenanceLogDto>> GetVehicleMaintenanceHistoryAsync(Guid vehicleId, CancellationToken ct = default)
+    {
+        var vehicle = await _db.Vehicles.FirstOrDefaultAsync(v => v.Id == vehicleId, ct)
+            ?? throw new NotFoundException(nameof(Vehicle), vehicleId);
+
+        if (!_currentUser.IsAdmin && vehicle.AssignedDriverId != _currentUser.UserId)
+            throw new ForbiddenAccessException();
+
+        var logs = await _db.MaintenanceLogs
+            .Where(l => l.VehicleId == vehicleId)
+            .Include(l => l.MaintenanceType)
+            .OrderByDescending(l => l.ServiceDate)
+            .ThenByDescending(l => l.MileageAtService)
+            .ToListAsync(ct);
+
+        return logs
+            .Select(l => new MaintenanceLogDto(l.Id, l.VehicleId, l.MaintenanceType?.Name ?? string.Empty, l.MileageAtService, l.ServiceDate, l.Cost, l.Notes))
+            .ToList();
+    }
 }

@@ -12,21 +12,26 @@ namespace FleetControl.Application.Services;
 /// </summary>
 public class DashboardService : IDashboardService
 {
+    private const string PhotoBucket = "vehicle-photos";
+
     private readonly IApplicationDbContext _db;
     private readonly ICurrentUserService _currentUser;
     private readonly IMaintenanceAlertCalculator _calculator;
     private readonly IDateTimeProvider _dateTime;
+    private readonly ISupabaseStorageService _storage;
 
     public DashboardService(
         IApplicationDbContext db,
         ICurrentUserService currentUser,
         IMaintenanceAlertCalculator calculator,
-        IDateTimeProvider dateTime)
+        IDateTimeProvider dateTime,
+        ISupabaseStorageService storage)
     {
         _db = db;
         _currentUser = currentUser;
         _calculator = calculator;
         _dateTime = dateTime;
+        _storage = storage;
     }
 
     public async Task<DashboardSummaryDto> GetSummaryAsync(CancellationToken ct = default)
@@ -34,6 +39,7 @@ public class DashboardService : IDashboardService
         var vehicles = await _db.Vehicles
             .Include(v => v.Documents)
             .Include(v => v.MaintenanceLogs)
+            .Include(v => v.Photos)
             .ToListAsync(ct);
 
         var maintenanceTypes = await _db.MaintenanceTypes
@@ -66,6 +72,7 @@ public class DashboardService : IDashboardService
             }
 
             var documentItems = vehicle.Documents
+                .Where(d => d.IsCurrent)
                 .Select(d => _calculator.CalculateDocumentStatus(vehicle.Id, d.Id, d.DocumentType, d.ExpirationDate, today))
                 .ToList();
 
@@ -82,7 +89,10 @@ public class DashboardService : IDashboardService
 
             if (worst is AlertStatus.Yellow or AlertStatus.Red)
             {
-                urgent.Add(new VehicleAlertSummaryDto(vehicle.Id, vehicle.LicensePlate, worst, maintenanceItems, documentItems));
+                var primaryPhoto = vehicle.Photos.OrderByDescending(p => p.IsPrimary).ThenByDescending(p => p.CreatedAt).FirstOrDefault();
+                var photoUrl = primaryPhoto is null ? null : _storage.GetPublicUrl(PhotoBucket, primaryPhoto.StoragePath);
+
+                urgent.Add(new VehicleAlertSummaryDto(vehicle.Id, vehicle.LicensePlate, worst, maintenanceItems, documentItems) { PhotoUrl = photoUrl });
             }
         }
 
