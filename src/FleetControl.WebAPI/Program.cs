@@ -51,10 +51,7 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy(CorsPolicy, policy =>
     {
-        var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
-            ?? new[] { "http://localhost:5173" };
-
-        policy.WithOrigins(allowedOrigins)
+        policy.WithOrigins("http://localhost:5173", "https://fleet-control-frontend.vercel.app")
               .AllowAnyHeader()
               .AllowAnyMethod();
     });
